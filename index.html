@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Chat Bot by Abiel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .recording-section {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .record-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 auto;
+        }
+
+        .record-button:hover {
+            background-color: #0056b3;
+        }
+
+        .record-button.recording {
+            background-color: #dc3545;
+        }
+
+        .response-section {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+
+        .response-text {
+            white-space: pre-wrap;
+            margin-bottom: 15px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            color: #dc3545;
+            text-align: center;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .audio-controls button {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .audio-controls button:hover {
+            background-color: #5a6268;
+        }
+
+        audio {
+            width: calc(100% - 100px);
+        }
+
+        .chat-history {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .chat-message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+
+        .bot-message {
+            background-color: #f8f9fa;
+            margin-right: 20%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align: center;">Voice Chat Bot by Abiel</h1>
+        
+        <div class="recording-section">
+            <button id="recordButton" class="record-button">
+                <i class="fas fa-microphone"></i>
+                Start Recording
+            </button>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Processing your audio...</p>
+        </div>
+
+        <div id="error" class="error-message"></div>
+
+        <div id="chatHistory" class="chat-history"></div>
+
+        <div id="responseSection" class="response-section" style="display: none;">
+            <h3>Latest Response:</h3>
+            <div id="responseText" class="response-text"></div>
+            <div class="audio-controls">
+                <audio id="responseAudio" autoplay>
+                    Your browser does not support the audio element.
+                </audio>
+                <button id="replayButton" onclick="replayAudio()" style="display: none;">
+                    <i class="fas fa-redo"></i> Replay
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://converse-y5pl.onrender.com';
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        const recordButton = document.getElementById('recordButton');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const responseSection = document.getElementById('responseSection');
+        const responseText = document.getElementById('responseText');
+        const responseAudio = document.getElementById('responseAudio');
+        const replayButton = document.getElementById('replayButton');
+        const chatHistory = document.getElementById('chatHistory');
+
+        recordButton.addEventListener('click', toggleRecording);
+
+        responseAudio.addEventListener('ended', () => {
+            replayButton.style.display = 'block';
+        });
+
+        async function toggleRecording() {
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+
+                    mediaRecorder.addEventListener('stop', () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/m4a' });
+                        sendAudioToServer(audioBlob);
+                    });
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordButton.classList.add('recording');
+                    recordButton.innerHTML = '<i class="fas fa-stop"></i> Stop Recording';
+
+                } catch (err) {
+                    showError('Could not access microphone. Please ensure you have given permission.');
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordButton.classList.remove('recording');
+                recordButton.innerHTML = '<i class="fas fa-microphone"></i> Start Recording';
+            }
+        }
+
+        async function sendAudioToServer(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.m4a');
+
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            responseSection.style.display = 'none';
+            replayButton.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addToChatHistory('User', 'Audio message sent');
+                    addToChatHistory('Bot', data.text);
+
+                    responseText.textContent = data.text;
+                    responseAudio.src = `${API_URL}${data.audioUrl}`;
+                    responseSection.style.display = 'block';
+                    
+                    responseAudio.play().catch(e => {
+                        console.log('Auto-play failed:', e);
+                        replayButton.style.display = 'block';
+                    });
+                } else {
+                    showError(data.error || 'An error occurred while processing your audio');
+                }
+            } catch (err) {
+                showError('Failed to connect to the server');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function addToChatHistory(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${sender.toLowerCase()}-message`;
+            messageDiv.textContent = `${sender}: ${message}`;
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function replayAudio() {
+            responseAudio.currentTime = 0;
+            responseAudio.play();
+            replayButton.style.display = 'none';
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+            loading.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
